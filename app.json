@@ -4,8 +4,16 @@
     "slug": "alcovia-student",
     "version": "1.0.0",
     "scheme": "alcovia",
-    "platforms": ["ios", "android"],
+    "platforms": [
+      "ios",
+      "android",
+      "web"
+    ],
     "newArchEnabled": true,
-    "plugins": ["expo-router", "expo-font"]
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-asset"
+    ]
   }
 }
