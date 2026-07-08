@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { getDb } from "../db";
 import sessionRoutes from "./sessions";
+import achievementRoutes from "./achievements";
 
 const router = Router();
 
@@ -38,5 +39,6 @@ router.get("/:id", (req, res) => {
 });
 
 router.use("/:id/sessions", sessionRoutes);
+router.use("/:id/achievements", achievementRoutes);
 
 export default router;

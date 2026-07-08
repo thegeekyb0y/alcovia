@@ -107,4 +107,63 @@ router.get("/", (req: Request<{ id: string }>, res: Response) => {
   res.json({ data, cursor: nextCursor, hasMore });
 });
 
+const detailParamsSchema = z.object({
+  id: z.string().min(1),
+  sessionId: z.string().min(1),
+});
+
+interface TimelineRow {
+  type: string;
+  duration_ms: number;
+  started_at: string; // already ISO in this table
+}
+
+router.get(
+  "/:sessionId",
+  (req: Request<{ id: string; sessionId: string }>, res: Response) => {
+    const parsed = detailParamsSchema.safeParse(req.params);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ error: "Invalid parameters", code: "BAD_REQUEST" });
+    }
+    const { id: studentId, sessionId } = parsed.data;
+    const db = getDb();
+
+    const session = db
+      .prepare("SELECT * FROM sessions WHERE id = ? AND student_id = ?")
+      .get(sessionId, studentId) as SessionRow | undefined;
+
+    if (!session) {
+      return res
+        .status(404)
+        .json({ error: "Session not found", code: "NOT_FOUND" });
+    }
+
+    const timeline = db
+      .prepare(
+        "SELECT type, duration_ms, started_at FROM session_timeline WHERE session_id = ? ORDER BY started_at ASC",
+      )
+      .all(sessionId) as TimelineRow[];
+
+    res.json({
+      id: session.id,
+      studentId: session.student_id,
+      type: session.type,
+      durationMs: session.duration_ms,
+      coins: session.coins,
+      status: session.status,
+      startedAt: new Date(session.started_at).toISOString(),
+      completedAt: session.completed_at
+        ? new Date(session.completed_at).toISOString()
+        : null,
+      timeline: timeline.map((t) => ({
+        type: t.type,
+        durationMs: t.duration_ms,
+        startedAt: t.started_at,
+      })),
+    });
+  },
+);
+
 export default router;
