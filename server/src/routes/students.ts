@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { getDb } from "../db";
+import sessionRoutes from "./sessions";
 
 const router = Router();
 
@@ -35,5 +36,7 @@ router.get("/:id", (req, res) => {
     joinedAt: row.joined_at,
   });
 });
+
+router.use("/:id/sessions", sessionRoutes);
 
 export default router;
