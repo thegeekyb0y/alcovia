@@ -249,47 +249,36 @@ function ProgressCard({
 
   return (
     <View style={styles.progressCard}>
-      <Svg width={size} height={size} viewBox="0 0 72 72">
-        <Circle
-          cx={36}
-          cy={36}
-          r={radius}
-          stroke={Colors.border}
-          strokeWidth={strokeWidth}
-          fill="none"
-        />
-        <AnimatedCircle
-          cx={36}
-          cy={36}
-          r={radius}
-          stroke={Colors.primary}
-          strokeWidth={strokeWidth}
-          fill="none"
-          strokeDasharray={circumference}
-          strokeDashoffset={animatedOffset}
-          strokeLinecap="round"
-          transform="rotate(-90 36 36)"
-        />
-        <SvgText
-          x={36}
-          y={33}
-          textAnchor="middle"
-          fontSize={16}
-          fontWeight="800"
-          fill={Colors.text}
-        >
-          {completed}/{goal}
-        </SvgText>
-        <SvgText
-          x={36}
-          y={45}
-          textAnchor="middle"
-          fontSize={7}
-          fill={Colors.textSecondary}
-        >
-          sessions
-        </SvgText>
-      </Svg>
+      <View style={styles.ringWrap}>
+        <Svg width={size} height={size} viewBox="0 0 72 72">
+          <Circle
+            cx={36}
+            cy={36}
+            r={radius}
+            stroke={Colors.border}
+            strokeWidth={strokeWidth}
+            fill="none"
+          />
+          <AnimatedCircle
+            cx={36}
+            cy={36}
+            r={radius}
+            stroke={Colors.primary}
+            strokeWidth={strokeWidth}
+            fill="none"
+            strokeDasharray={circumference}
+            strokeDashoffset={animatedOffset}
+            strokeLinecap="round"
+            transform="rotate(-90 36 36)"
+          />
+        </Svg>
+        <View style={styles.ringLabelOverlay}>
+          <Text style={styles.ringLabelNumber}>
+            {completed}/{goal}
+          </Text>
+          <Text style={styles.ringLabelText}>sessions</Text>
+        </View>
+      </View>
       <View style={styles.progressTextWrap}>
         <Text style={styles.progressTitle}>{title}</Text>
         <Text style={styles.progressSubtitle}>{subtitle}</Text>
@@ -432,6 +421,21 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.lg,
     ...Shadows.card,
   },
+  ringWrap: {
+    width: 72,
+    height: 72,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  ringLabelOverlay: {
+    position: "absolute",
+    width: 72,
+    height: 72,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  ringLabelNumber: { fontSize: 16, fontWeight: "800", color: Colors.text },
+  ringLabelText: { fontSize: 7, color: Colors.textSecondary, marginTop: 1 },
   progressTextWrap: { flex: 1 },
   progressTitle: {
     fontSize: 15,
