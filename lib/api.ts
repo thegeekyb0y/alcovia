@@ -5,6 +5,16 @@ import type { Student, WeeklyStats } from "@/types/api";
 
 import type { Session, PaginatedResponse } from "@/types/api";
 
+import type { Achievement } from "@/types/api";
+
+export async function getAchievements(
+  studentId: string,
+): Promise<Achievement[]> {
+  const res = await fetch(`${API_BASE_URL}/students/${studentId}/achievements`);
+  if (!res.ok) throw new Error("Failed to load achievements");
+  return res.json();
+}
+
 export async function getSessionDetail(
   studentId: string,
   sessionId: string,
