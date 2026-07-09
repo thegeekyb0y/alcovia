@@ -1,10 +1,14 @@
+import { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
   Pressable,
   StyleSheet,
   ActivityIndicator,
+  Animated,
+  Easing,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
 import Svg, { Circle, Text as SvgText } from "react-native-svg";
@@ -12,6 +16,8 @@ import { Colors, Radii, Spacing, Shadows } from "@/constants/Colors";
 import { CURRENT_STUDENT_ID } from "@/constants/config";
 import { getStudent, getWeeklyStats } from "@/lib/api";
 import type { DayStat } from "@/types/api";
+
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 const DAY_LETTERS: Record<string, string> = {
   mon: "M",
@@ -23,10 +29,31 @@ const DAY_LETTERS: Record<string, string> = {
   sun: "S",
 };
 
-// Map JS's Date.getDay() (Sun=0..Sat=6) to our mon-first day order (mon=0..sun=6)
 function todayIndexMonFirst(): number {
   const jsDay = new Date().getDay();
   return (jsDay + 6) % 7;
+}
+
+// ============================================================
+// Count-up number — animates from 0 to `value` on mount/change
+// ============================================================
+
+function useCountUp(value: number, durationMs = 700): number {
+  const [display, setDisplay] = useState(0);
+  useEffect(() => {
+    const anim = new Animated.Value(0);
+    const listener = anim.addListener(({ value: v }) =>
+      setDisplay(Math.round(v)),
+    );
+    Animated.timing(anim, {
+      toValue: value,
+      duration: durationMs,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false, // animating a JS number, not a native style prop
+    }).start();
+    return () => anim.removeListener(listener);
+  }, [value]);
+  return display;
 }
 
 export default function DashboardScreen() {
@@ -41,9 +68,9 @@ export default function DashboardScreen() {
 
   if (studentQuery.isLoading || statsQuery.isLoading) {
     return (
-      <View style={styles.centerFill}>
+      <SafeAreaView edges={["top"]} style={styles.centerFill}>
         <ActivityIndicator color={Colors.primary} size="large" />
-      </View>
+      </SafeAreaView>
     );
   }
 
@@ -54,7 +81,7 @@ export default function DashboardScreen() {
     !statsQuery.data
   ) {
     return (
-      <View style={styles.centerFill}>
+      <SafeAreaView edges={["top"]} style={styles.centerFill}>
         <Text style={styles.errorText}>Couldn't load your dashboard.</Text>
         <Pressable
           style={styles.retryButton}
@@ -65,7 +92,7 @@ export default function DashboardScreen() {
         >
           <Text style={styles.retryButtonText}>Retry</Text>
         </Pressable>
-      </View>
+      </SafeAreaView>
     );
   }
 
@@ -74,7 +101,7 @@ export default function DashboardScreen() {
   const firstName = student.name.split(" ")[0];
 
   return (
-    <View style={styles.screen}>
+    <SafeAreaView edges={["top"]} style={styles.screen}>
       {/* Greeting */}
       <View style={styles.greetingRow}>
         <View style={styles.avatar}>
@@ -117,10 +144,8 @@ export default function DashboardScreen() {
       <ProgressCard completed={stats.todayCompleted} goal={stats.dailyGoal} />
 
       {/* CTA */}
-      <Pressable style={styles.cta} onPress={() => router.push("/timer")}>
-        <Text style={styles.ctaText}>Start Session</Text>
-      </Pressable>
-    </View>
+      <PressScaleButton onPress={() => router.push("/timer")} />
+    </SafeAreaView>
   );
 }
 
@@ -141,17 +166,19 @@ function StatCard({
       : tint === "green"
         ? Colors.successLight
         : Colors.amberLight;
+  const displayNumber = useCountUp(number);
+
   return (
     <View style={[styles.statCard, { backgroundColor: bg }]}>
       <Text style={styles.statIcon}>{icon}</Text>
-      <Text style={styles.statNumber}>{number}</Text>
+      <Text style={styles.statNumber}>{displayNumber}</Text>
       <Text style={styles.statLabel}>{label.toUpperCase()}</Text>
     </View>
   );
 }
 
 function WeeklyChart({ data }: { data: DayStat[] }) {
-  const maxCount = Math.max(...data.map((d) => d.count), 1); // avoid divide-by-zero on an all-zero week
+  const maxCount = Math.max(...data.map((d) => d.count), 1);
   const todayIdx = todayIndexMonFirst();
 
   return (
@@ -193,12 +220,21 @@ function ProgressCard({
   goal: number;
 }) {
   const size = 72;
-  const radius = 32; // matches the spec's viewBox 100x100, r=40, scaled proportionally into a 72px box
+  const radius = 32;
   const strokeWidth = 7;
   const circumference = 2 * Math.PI * radius;
   const ratio = goal > 0 ? Math.min(completed / goal, 1) : 0;
-  const dash = circumference * ratio;
-  const gap = circumference - dash;
+  const targetDashOffset = circumference * (1 - ratio);
+
+  const animatedOffset = useRef(new Animated.Value(circumference)).current; // starts empty
+  useEffect(() => {
+    Animated.timing(animatedOffset, {
+      toValue: targetDashOffset,
+      duration: 900,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false, // SVG stroke props aren't supported by the native driver
+    }).start();
+  }, [targetDashOffset]);
 
   const goalMet = completed >= goal;
   const remaining = Math.max(goal - completed, 0);
@@ -222,14 +258,15 @@ function ProgressCard({
           strokeWidth={strokeWidth}
           fill="none"
         />
-        <Circle
+        <AnimatedCircle
           cx={36}
           cy={36}
           r={radius}
           stroke={Colors.primary}
           strokeWidth={strokeWidth}
           fill="none"
-          strokeDasharray={`${dash} ${gap}`}
+          strokeDasharray={circumference}
+          strokeDashoffset={animatedOffset}
           strokeLinecap="round"
           transform="rotate(-90 36 36)"
         />
@@ -258,6 +295,30 @@ function ProgressCard({
         <Text style={styles.progressSubtitle}>{subtitle}</Text>
       </View>
     </View>
+  );
+}
+
+function PressScaleButton({ onPress }: { onPress: () => void }) {
+  const scale = useRef(new Animated.Value(1)).current;
+  const animateTo = (toValue: number) =>
+    Animated.spring(scale, {
+      toValue,
+      useNativeDriver: true,
+      speed: 40,
+      bounciness: 6,
+    }).start();
+
+  return (
+    <Animated.View style={{ transform: [{ scale }] }}>
+      <Pressable
+        style={styles.cta}
+        onPressIn={() => animateTo(0.96)}
+        onPressOut={() => animateTo(1)}
+        onPress={onPress}
+      >
+        <Text style={styles.ctaText}>Start Session</Text>
+      </Pressable>
+    </Animated.View>
   );
 }
 
@@ -384,7 +445,7 @@ const styles = StyleSheet.create({
     width: "100%",
     paddingVertical: Spacing.lg,
     backgroundColor: Colors.primary,
-    borderRadius: 14, // annotation-specified 14px, overriding generic Radii.button (12)
+    borderRadius: 14,
     alignItems: "center",
     ...Shadows.cta,
   },

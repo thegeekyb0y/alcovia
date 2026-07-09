@@ -1,5 +1,6 @@
-import { useReducer, useEffect, useRef } from "react";
+import { useReducer, useEffect, useRef, useState } from "react";
 import { View, Text, Pressable, StyleSheet, Animated } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
 import Svg, {
@@ -16,7 +17,7 @@ import { createSession } from "@/lib/api";
 import type { SessionType } from "@/types/api";
 
 // ============================================================
-// Config — preset durations per type, in minutes (not specced, our design call)
+// Config
 // ============================================================
 
 const DURATIONS: Record<SessionType, number[]> = {
@@ -31,20 +32,32 @@ const TYPE_LABELS: Record<SessionType, string> = {
   pomodoro: "Pomodoro",
 };
 
+const TYPE_DESCRIPTIONS: Record<SessionType, string> = {
+  deep_focus: "Long, uninterrupted focus time",
+  quick_sprint: "Short bursts for quick tasks",
+  pomodoro: "Classic focus + break cycles",
+};
+
 const TYPE_ICONS: Record<SessionType, keyof typeof Ionicons.glyphMap> = {
   deep_focus: "moon",
   quick_sprint: "flash",
   pomodoro: "timer",
 };
 
-// Set to false before final submission — true lets you test with seconds instead of minutes
-const DEV_FAST_MODE = false;
-const MS_PER_UNIT = DEV_FAST_MODE ? 1000 : 60 * 1000;
+const TYPE_TINTS: Record<SessionType, string> = {
+  deep_focus: Colors.primaryLight,
+  quick_sprint: Colors.successLight,
+  pomodoro: Colors.amberLight,
+};
 
-// ============================================================
-// Navigation helper — handles the case where this screen was
-// reached with no back-history (e.g. typed the URL directly)
-// ============================================================
+const TYPE_SOLID: Record<SessionType, string> = {
+  deep_focus: Colors.primary,
+  quick_sprint: Colors.success,
+  pomodoro: Colors.amber,
+};
+
+const DEV_FAST_MODE = false; // true = "minutes" behave as seconds, for quick testing only
+const MS_PER_UNIT = DEV_FAST_MODE ? 1000 : 60 * 1000;
 
 function safeGoBack() {
   if (router.canGoBack()) {
@@ -99,8 +112,6 @@ function reducer(state: State, action: Action): State {
       return { ...state, phase: "paused" };
     case "RESUME":
       if (state.phase !== "paused") return state;
-      // Recompute endAt from remainingMs — real pause, not a frozen display
-      // while time keeps draining underneath
       return {
         ...state,
         phase: "running",
@@ -121,6 +132,7 @@ function reducer(state: State, action: Action): State {
 
 export default function TimerScreen() {
   const [state, dispatch] = useReducer(reducer, { phase: "idle" });
+  const [pickedType, setPickedType] = useState<SessionType | null>(null); // idle-phase step tracker
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const mutation = useMutation({
@@ -140,12 +152,10 @@ export default function TimerScreen() {
           },
         ],
       }),
-    onSuccess: (session) => {
-      dispatch({ type: "COMPLETE", coins: session.coins });
-    },
+    onSuccess: (session) =>
+      dispatch({ type: "COMPLETE", coins: session.coins }),
   });
 
-  // Tick every 250ms while running — smooth enough for a visual countdown
   useEffect(() => {
     if (state.phase === "running") {
       intervalRef.current = setInterval(() => dispatch({ type: "TICK" }), 250);
@@ -157,7 +167,6 @@ export default function TimerScreen() {
     };
   }, [state.phase]);
 
-  // Auto-fire completion once remainingMs actually hits 0
   useEffect(() => {
     if (state.phase === "running" && state.remainingMs === 0) {
       mutation.mutate({
@@ -168,63 +177,40 @@ export default function TimerScreen() {
     }
   }, [state]);
 
-  // ---------- idle: type + duration picker ----------
+  // ---------- idle: two-step picker ----------
   if (state.phase === "idle") {
+    if (!pickedType) {
+      return <TypeSelectStep onSelect={setPickedType} onCancel={safeGoBack} />;
+    }
     return (
-      <LinearGradient
-        colors={[Colors.background, Colors.primaryLight]}
-        style={styles.container}
-      >
-        <Text style={styles.pickerTitle}>Start a session</Text>
-        {(Object.keys(DURATIONS) as SessionType[]).map((type) => (
-          <View key={type} style={styles.typeGroup}>
-            <View style={styles.typeGroupHeader}>
-              <Ionicons
-                name={TYPE_ICONS[type]}
-                size={18}
-                color={Colors.primary}
-              />
-              <Text style={styles.typeGroupLabel}>{TYPE_LABELS[type]}</Text>
-            </View>
-            <View style={styles.durationRow}>
-              {DURATIONS[type].map((minutes) => (
-                <Pressable
-                  key={minutes}
-                  style={styles.durationChip}
-                  onPress={() =>
-                    dispatch({
-                      type: "START",
-                      sessionType: type,
-                      totalMs: minutes * MS_PER_UNIT,
-                    })
-                  }
-                >
-                  <Text style={styles.durationChipText}>{minutes}m</Text>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-        ))}
-        <Pressable style={styles.secondaryButton} onPress={safeGoBack}>
-          <Text style={styles.secondaryButtonText}>Cancel</Text>
-        </Pressable>
-      </LinearGradient>
+      <DurationSelectStep
+        type={pickedType}
+        onBack={() => setPickedType(null)}
+        onStart={(minutes) =>
+          dispatch({
+            type: "START",
+            sessionType: pickedType,
+            totalMs: minutes * MS_PER_UNIT,
+          })
+        }
+      />
     );
   }
 
   // ---------- completed ----------
   if (state.phase === "completed") {
     return (
-      <LinearGradient
-        colors={[Colors.background, Colors.primaryLight]}
-        style={styles.container}
-      >
+      <SafeAreaView edges={["top"]} style={styles.container}>
+        <LinearGradient
+          colors={[Colors.background, Colors.primaryLight]}
+          style={StyleSheet.absoluteFill}
+        />
         <Text style={styles.completedTitle}>Session complete 🎉</Text>
         <Text style={styles.coinsText}>+{state.coins} coins</Text>
         <Pressable style={styles.primaryButton} onPress={safeGoBack}>
           <Text style={styles.primaryButtonText}>Done</Text>
         </Pressable>
-      </LinearGradient>
+      </SafeAreaView>
     );
   }
 
@@ -234,10 +220,11 @@ export default function TimerScreen() {
   const seconds = Math.floor((state.remainingMs % 60000) / 1000);
 
   return (
-    <LinearGradient
-      colors={[Colors.background, Colors.primaryLight]}
-      style={styles.container}
-    >
+    <SafeAreaView edges={["top"]} style={styles.container}>
+      <LinearGradient
+        colors={[Colors.background, Colors.primaryLight]}
+        style={StyleSheet.absoluteFill}
+      />
       <Text style={styles.typeLabel}>{TYPE_LABELS[state.type]}</Text>
       <ProgressRing
         progress={progress}
@@ -267,7 +254,132 @@ export default function TimerScreen() {
           <Text style={styles.secondaryButtonText}>Abandon</Text>
         </Pressable>
       </View>
-    </LinearGradient>
+    </SafeAreaView>
+  );
+}
+
+// ============================================================
+// Step 1: pick a session type — large tappable cards
+// ============================================================
+
+function TypeSelectStep({
+  onSelect,
+  onCancel,
+}: {
+  onSelect: (type: SessionType) => void;
+  onCancel: () => void;
+}) {
+  return (
+    <SafeAreaView edges={["top"]} style={styles.container}>
+      <LinearGradient
+        colors={[Colors.background, Colors.primaryLight]}
+        style={StyleSheet.absoluteFill}
+      />
+      <Text style={styles.pickerTitle}>What are you focusing on?</Text>
+      <View style={styles.cardList}>
+        {(Object.keys(DURATIONS) as SessionType[]).map((type) => (
+          <TypeCard key={type} type={type} onPress={() => onSelect(type)} />
+        ))}
+      </View>
+      <Pressable style={styles.secondaryButton} onPress={onCancel}>
+        <Text style={styles.secondaryButtonText}>Cancel</Text>
+      </Pressable>
+    </SafeAreaView>
+  );
+}
+
+function TypeCard({
+  type,
+  onPress,
+}: {
+  type: SessionType;
+  onPress: () => void;
+}) {
+  const scale = useRef(new Animated.Value(1)).current;
+  const animateTo = (v: number) =>
+    Animated.spring(scale, {
+      toValue: v,
+      useNativeDriver: true,
+      speed: 40,
+      bounciness: 6,
+    }).start();
+
+  return (
+    <Animated.View style={{ transform: [{ scale }] }}>
+      <Pressable
+        style={[styles.typeCard, { borderLeftColor: TYPE_SOLID[type] }]}
+        onPressIn={() => animateTo(0.98)}
+        onPressOut={() => animateTo(1)}
+        onPress={onPress}
+      >
+        <View
+          style={[styles.typeCardIcon, { backgroundColor: TYPE_TINTS[type] }]}
+        >
+          <Ionicons
+            name={TYPE_ICONS[type]}
+            size={22}
+            color={TYPE_SOLID[type]}
+          />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.typeCardTitle}>{TYPE_LABELS[type]}</Text>
+          <Text style={styles.typeCardDesc}>{TYPE_DESCRIPTIONS[type]}</Text>
+        </View>
+        <Ionicons
+          name="chevron-forward"
+          size={20}
+          color={Colors.textTertiary}
+        />
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+// ============================================================
+// Step 2: pick a duration for the chosen type
+// ============================================================
+
+function DurationSelectStep({
+  type,
+  onBack,
+  onStart,
+}: {
+  type: SessionType;
+  onBack: () => void;
+  onStart: (minutes: number) => void;
+}) {
+  return (
+    <SafeAreaView edges={["top"]} style={styles.container}>
+      <LinearGradient
+        colors={[Colors.background, Colors.primaryLight]}
+        style={StyleSheet.absoluteFill}
+      />
+      <Pressable style={styles.backRow} onPress={onBack} hitSlop={12}>
+        <Ionicons name="chevron-back" size={20} color={Colors.textSecondary} />
+        <Text style={styles.backRowText}>Back</Text>
+      </Pressable>
+
+      <View
+        style={[styles.bigIconCircle, { backgroundColor: TYPE_TINTS[type] }]}
+      >
+        <Ionicons name={TYPE_ICONS[type]} size={36} color={TYPE_SOLID[type]} />
+      </View>
+      <Text style={styles.pickerTitle}>{TYPE_LABELS[type]}</Text>
+      <Text style={styles.durationPrompt}>Choose a duration</Text>
+
+      <View style={styles.durationRow}>
+        {DURATIONS[type].map((minutes) => (
+          <Pressable
+            key={minutes}
+            style={styles.durationChip}
+            onPress={() => onStart(minutes)}
+          >
+            <Text style={styles.durationChipText}>{minutes}</Text>
+            <Text style={styles.durationChipUnit}>min</Text>
+          </Pressable>
+        ))}
+      </View>
+    </SafeAreaView>
   );
 }
 
@@ -328,7 +440,7 @@ function ProgressRing({
           width: size,
           height: size,
           borderRadius: size / 2,
-          backgroundColor: Colors.primary,
+          backgroundColor: TYPE_SOLID[type],
           transform: [{ scale: glowScale }],
           opacity: glowOpacity,
         }}
@@ -337,7 +449,7 @@ function ProgressRing({
         <Defs>
           <SvgGradient id="ringGradient" x1="0%" y1="0%" x2="100%" y2="100%">
             <Stop offset="0%" stopColor="#8B7FF0" />
-            <Stop offset="100%" stopColor={Colors.primary} />
+            <Stop offset="100%" stopColor={TYPE_SOLID[type]} />
           </SvgGradient>
         </Defs>
         <Circle
@@ -362,7 +474,7 @@ function ProgressRing({
         />
       </Svg>
       <View style={{ position: "absolute", alignItems: "center" }}>
-        <Ionicons name={TYPE_ICONS[type]} size={28} color={Colors.primary} />
+        <Ionicons name={TYPE_ICONS[type]} size={28} color={TYPE_SOLID[type]} />
       </View>
     </View>
   );
@@ -380,37 +492,79 @@ const styles = StyleSheet.create({
     padding: Spacing.xxl,
     gap: Spacing.lg,
   },
+
   pickerTitle: {
     fontSize: 22,
     fontWeight: "700",
     color: Colors.text,
-    marginBottom: Spacing.md,
+    textAlign: "center",
   },
-  typeGroup: {
+  cardList: {
     width: "100%",
     maxWidth: 400,
     alignSelf: "center",
-    gap: Spacing.sm,
+    gap: Spacing.md,
+    marginTop: Spacing.md,
   },
-  typeGroupHeader: {
+
+  typeCard: {
     flexDirection: "row",
     alignItems: "center",
-    gap: Spacing.xs,
-  },
-  typeGroupLabel: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: Colors.textSecondary,
-  },
-  durationRow: { flexDirection: "row", gap: Spacing.sm },
-  durationChip: {
-    paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.lg,
-    borderRadius: Radii.pill,
+    gap: Spacing.md,
     backgroundColor: Colors.surface,
+    borderRadius: Radii.card,
+    borderLeftWidth: 4,
+    padding: Spacing.lg,
     ...Shadows.card,
   },
-  durationChipText: { color: Colors.text, fontWeight: "600" },
+  typeCardIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  typeCardTitle: { fontSize: 15, fontWeight: "700", color: Colors.text },
+  typeCardDesc: { fontSize: 12, color: Colors.textSecondary, marginTop: 2 },
+
+  backRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 2,
+    position: "absolute",
+    top: Spacing.xl,
+    left: Spacing.xl,
+  },
+  backRowText: { fontSize: 14, fontWeight: "600", color: Colors.textSecondary },
+
+  bigIconCircle: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: Spacing.xxl,
+  },
+  durationPrompt: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    marginTop: -Spacing.sm,
+  },
+
+  durationRow: { flexDirection: "row", gap: Spacing.md, marginTop: Spacing.lg },
+  durationChip: {
+    alignItems: "center",
+    paddingVertical: Spacing.lg,
+    paddingHorizontal: Spacing.xl,
+    borderRadius: Radii.card,
+    backgroundColor: Colors.surface,
+    minWidth: 84,
+    ...Shadows.card,
+  },
+  durationChipText: { fontSize: 22, fontWeight: "800", color: Colors.text },
+  durationChipUnit: { fontSize: 11, color: Colors.textSecondary, marginTop: 2 },
+
   typeLabel: { fontSize: 16, color: Colors.textSecondary, fontWeight: "600" },
   timeText: { fontSize: 40, fontWeight: "800", color: Colors.text },
   controlsRow: {

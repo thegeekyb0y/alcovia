@@ -16,6 +16,7 @@ import { Colors, Radii, Spacing, Shadows } from "@/constants/Colors";
 import { CURRENT_STUDENT_ID } from "@/constants/config";
 import { getSessions } from "@/lib/api";
 import type { Session, SessionType } from "@/types/api";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 type FilterValue = "today" | "week" | "month" | undefined;
 
@@ -97,7 +98,7 @@ export default function HistoryScreen() {
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   return (
-    <View style={styles.screen}>
+    <SafeAreaView edges={["top"]} style={styles.screen}>
       <Text style={styles.header}>History</Text>
 
       <View style={styles.filterRow}>
@@ -161,7 +162,7 @@ export default function HistoryScreen() {
           }
         />
       )}
-    </View>
+    </SafeAreaView>
   );
 }
 
