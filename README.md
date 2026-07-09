@@ -1,7 +1,5 @@
 # Alcovia Student App - Assignment
 
-**Time limit:** 48 hours from when you receive this.
-
 You're building screens for a student focus app, the API that powers them, and optionally an automation workflow. A design spec, starter code, and seed data are provided. What you build on top of them is your call.
 
 ---
@@ -9,6 +7,7 @@ You're building screens for a student focus app, the API that powers them, and o
 ## What's in this submission
 
 **Core requirements:** all done, Dashboard matches the design spec, History and Session Detail handle loading, empty, error, and pagination states.
+<img width="1200" height="630" alt="image" src="https://github.com/user-attachments/assets/17bb47c0-74b0-4240-b6e4-6b327e50e6d4" />
 
 ### Checklist
 
