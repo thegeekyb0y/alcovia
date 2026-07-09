@@ -6,17 +6,111 @@ You're building screens for a student focus app, the API that powers them, and o
 
 ---
 
+## What's in this submission
+
+**Core requirements:** all done, Dashboard matches the design spec, History and Session Detail handle loading, empty, error, and pagination states.
+
+### Checklist
+
+**Mobile app (React Native / Expo)**
+
+- [x] Dashboard — fully specced, matched closely
+- [x] History — empty, loading, error, and pagination states handled
+- [x] Session Detail — no spec given, built from scratch
+
+**Backend API (Express + SQLite)**
+
+- [x] `GET /students/:id`
+- [x] `GET /students/:id/sessions` (cursor-based pagination + filters)
+- [x] `GET /students/:id/sessions/:sessionId`
+- [x] `GET /students/:id/stats?period=week`
+- [x] Cursor-based pagination (not offset)
+- [x] Date format inconsistency handled (epoch ms on list, ISO on detail)
+- [x] Input validation and error handling
+
+**Bonus challenges (2 needed, 3 completed)**
+
+- [x] **B1. Focus Timer**
+- [x] **B2. Achievements Screen**
+- [ ] B3. n8n Streak Workflow — not attempted
+- [ ] B4. Tests — not attempted
+- [x] **B5. Animations & Polish**
+
+Full reasoning for every decision, including tradeoffs and known weak spots, is in **[DECISIONS.md](./DECISIONS.md)**.
+
+### How data flows: session completion → achievements
+
+```mermaid
+sequenceDiagram
+    actor Student
+    participant App as React Native App
+    participant Server as Alcovia Server
+    participant DB as SQLite DB
+
+    Student->>App: Clicks "Start Deep Focus"
+    App-->>Student: Displays Timer Screen
+    Student->>App: Completes Timer / Time Expires
+    App->>Server: POST /sessions (duration, type)
+    Server->>DB: Save session & reward coins
+    DB-->>Server: Success
+    Server->>DB: Check daily streak logic
+    Server-->>App: Return updated stats (coins, streak)
+
+    Student->>App: Navigates to Achievements
+    App->>Server: GET /achievements
+    Server->>DB: Fetch unlocked badges & progress
+    DB-->>Server: Return achievements data
+    Server-->>App: Render trophies UI
+    App-->>Student: Displays unlocked trophies
+```
+
+### How pagination works
+
+```mermaid
+sequenceDiagram
+    actor Student
+    participant App as React Native App
+    participant Server as Alcovia Server
+    participant DB as SQLite DB
+
+    Student->>App: Scrolls to bottom of History
+    App->>Server: GET /sessions?cursor=<base64>
+    Server->>Server: Decode cursor into {startedAt, id}
+    Server->>DB: SELECT WHERE (started_at < cursor.startedAt) OR (started_at = cursor.startedAt AND id < cursor.id) ORDER BY started_at DESC, id DESC LIMIT (limit + 1)
+    DB-->>Server: Rows (up to limit + 1)
+    Server->>Server: hasMore = rows.length > limit
+    Server->>Server: Encode new cursor from last row
+    Server-->>App: { data, cursor, hasMore }
+    App->>App: Append page to list
+
+    alt hasMore is true
+        App-->>Student: Shows footer loading spinner on next scroll
+    else hasMore is false
+        App-->>Student: List ends, no more requests fired
+    end
+```
+
+### One note on setup
+
+`API_BASE_URL` in `constants/config.ts` auto-detects the dev machine's LAN IP from Expo's Metro bundler at runtime, no manual IP editing needed. Just make sure your phone (or emulator) and the machine running `npm run dev` are on the same network.
+
+---
+
+## Original assignment brief
+
+The rest of this file is the assignment as given, kept for reference.
+
 ## Core Requirements
 
 Everyone must complete these. This is what you're evaluated on.
 
 ### 1. Mobile app (React Native / Expo)
 
-| Screen | Spec level | What this means |
-|--------|-----------|-----------------|
-| Dashboard | **Fully specced** | Design reference has exact measurements, colors, spacing. Match it closely. |
-| History | **Partially specced** | Happy path is designed. Empty, loading, error, and pagination states are on you. |
-| Session Detail | **No spec** | Tapping a session in History should go somewhere useful. Figure out what. |
+| Screen         | Spec level            | What this means                                                                  |
+| -------------- | --------------------- | -------------------------------------------------------------------------------- |
+| Dashboard      | **Fully specced**     | Design reference has exact measurements, colors, spacing. Match it closely.      |
+| History        | **Partially specced** | Happy path is designed. Empty, loading, error, and pagination states are on you. |
+| Session Detail | **No spec**           | Tapping a session in History should go somewhere useful. Figure out what.        |
 
 ### 2. Backend API (Express + SQLite)
 
@@ -28,6 +122,7 @@ The database schema, seed script, and fixture data are provided in `server/`. Yo
 - `GET /students/:id/stats?period=week`
 
 Pay attention to:
+
 - Cursor-based pagination (not offset)
 - The date format inconsistency between the sessions list and session detail endpoints (this is intentional, read the spec)
 - Input validation and error handling
@@ -44,18 +139,23 @@ Pay attention to:
 These are optional. Complete any 2 or more and you're **guaranteed an interview**, regardless of how polished the core is.
 
 ### B1. Focus Timer
+
 Build a Focus Timer screen accessible from the Dashboard's "Start Session" button. There is no design for this - you decide everything: timer UI, session type selection, pause/resume, and what happens when a session completes. Must POST to the `POST /students/:id/sessions` endpoint on completion.
 
 ### B2. Achievements Screen
+
 Build the Achievements tab from the wireframe. You get the data shape and 12 achievement names. Everything visual is your decision: layout, locked vs unlocked treatment, progress visualization, animations. Must use `GET /students/:id/achievements`.
 
 ### B3. n8n Streak Workflow
+
 When a student completes their daily goal (3 sessions), fire a webhook to an n8n workflow. Set up an n8n instance (local Docker or n8n.cloud free tier), create a workflow that does something useful with the notification, and make it idempotent (same student + same day = 1 notification). Payload documented in `API-SPEC.md`.
 
 ### B4. Tests
+
 Write tests for your API. At minimum: pagination logic (cursor encoding/decoding, hasMore flag, edge cases) and the date format handling (epoch ms on list, ISO on detail).
 
 ### B5. Animations & Polish
+
 Meaningful transitions between screens, skeleton loading states (not spinners), haptic feedback, or micro-interactions that make the app feel native.
 
 ---
@@ -115,6 +215,7 @@ You'll receive a submission form link in the assignment email. You'll need:
 We care about decisions more than polish. A thoughtful app with rough edges beats a pixel-perfect app that doesn't handle edge cases.
 
 Specifically:
+
 - How closely you match the design spec (Dashboard)
 - How you handle states the spec doesn't cover (loading, empty, error, pagination)
 - How you deal with the intentional API quirks (date formats, cursor pagination)
